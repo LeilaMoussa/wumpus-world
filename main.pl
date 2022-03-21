@@ -1,3 +1,4 @@
+% `abolish` and `dynamic` are required for predicates that are asserted or retracted at runtime.
 :- abolish(position/2).
 :- abolish(wumpus_alive/0).
 :- abolish(gold/1).
@@ -18,6 +19,7 @@
   parent/2
 ]).
 
+% Utility functions describing properties of any world.
 valid(X) :- X is 1; X is 2; X is 3; X is 4.
 in_bounds(X, Y) :- valid(X), valid(Y).
 room(X, Y) :- in_bounds(X, Y).
@@ -41,6 +43,7 @@ stench(room(_, _), no).
 scream(yes) :- dead().
 scream(no).
 
+% The list of perceptions is updated iteratively.
 perceptions([Stench, Breeze, Glitter, Scream]) :- position(room(X, Y), T),
                                                   stench(room(X,Y), Stench),
                                                   format("[IN Perceptions] : Stench percept in room(~w,~w): ~w!~n", [X,Y,Stench]),
@@ -52,7 +55,9 @@ perceptions([Stench, Breeze, Glitter, Scream]) :- position(room(X, Y), T),
                                                   format("[IN Perceptions] : Percepts in room(~w,~w) at time ~w: [~w,~w,~w,~w]!~n", [X,Y,T,Stench,Breeze,Glitter,Scream]),!.
 
 % ACTIONS
-% generic move
+% Travel from anywhere in the world to anywhere else, not just adjacent rooms,
+% with the assumption that this is onlt ever used when there exists a path between the start and the destination
+% that is fully safe.
 travel(room(X, Y), room(A, B), T) :- position(room(X, Y), T), room(A,B) \== room(X,Y),
                 Xdiff is abs(A - X),
                 Ydiff is abs(B - Y),
@@ -67,15 +72,17 @@ travel(room(X, Y), room(A, B), T) :- position(room(X, Y), T), room(A,B) \== room
 								asserta(score(C)), format("Traveled from room(~w,~w) to room(~w,~w) at time ~w~n", [X,Y,A,B,T]),
                 asserta(safe(room(A, B))), !.
 
+% Gold gives you 100 points, but the action of grabbing costs one point.
 grab_gold() :- position(room(X, Y), T), gold(room(X, Y)),
 				retractall(gold(_)),
 				retractall(glitter(_)),
-                score(S),
-                C is S + 100 - 1,
-                retractall(score(_)),
-                asserta(score(C)),
-                format("Grabbed gold from room(~w,~w) at time ~w~n", [X,Y,T]).
+        score(S),
+        C is S + 100 - 1,
+        retractall(score(_)),
+        asserta(score(C)),
+        format("Grabbed gold from room(~w,~w) at time ~w~n", [X,Y,T]).
 
+% Only shoot if you haven't shot already and if you're adjacent to your target.
 shoot(room(X, Y), T) :- position(room(A, B), T), adjacent(room(X, Y), room(A, B)), not(did_shoot(_, _)),
  					retractall(did_shoot(_, _)),
  					asserta(did_shoot(X, Y)),
@@ -85,8 +92,10 @@ shoot(room(X, Y), T) :- position(room(A, B), T), adjacent(room(X, Y), room(A, B)
  					asserta(score(C)),
  					format("Shot room(~w,~w) at time ~w~n", [X,Y,T]), !.
 
+% The wumpus is dead if you shot at the room where it is.
 dead() :- did_shoot(X, Y), wumpus(room(X, Y)), retractall(wumpus_alive()).
 
+% You fall into a pit if you move to a room containing a pit.
 fall(T) :- position(room(X, Y), T), pit(room(X, Y)),
 		score(S),
 		C is S - 1000,
@@ -94,6 +103,7 @@ fall(T) :- position(room(X, Y), T), pit(room(X, Y)),
 		asserta(score(C)),
 		retractall(player_alive()).
 
+% Similarly, you can be eaten by the wumpus.
 eaten(T) :- position(room(X, Y), T), wumpus(room(X, Y)),
 		score(S),
 		C is S - 1000,
@@ -101,10 +111,14 @@ eaten(T) :- position(room(X, Y), T), wumpus(room(X, Y)),
 		asserta(score(C)),
 		retractall(player_alive()).
 
+% The entry point to the game.
 start_game() :- loop(0).
 
+% Don't loop more than 199 times.
 loop(200) :- write('Game Over... Too much time spent!'), nl, !, halt.
 
+% In each iteration, update the perceptions, act on them, then decide whether to end the game
+% due to death (fall, eaten, life running out), loss (missed your shot), or if you win.
 loop(Iter) :-
   perceptions(L),
   format("[IN LOOP] : Perceptions in loop iter ~w: ~w!~n", [Iter,L]),
@@ -126,6 +140,8 @@ loop(Iter) :-
   (did_shoot(_, _), wumpus_alive() -> (
     format("Missed your shot -- no way to win."), !, halt
   ));
+  % It's useful after each action to reflect on your knowledge and update the useful bits:
+  % here, trying to deduce whether a pit or a wumpus exist for certain somewhere close to where we visited.
   check_for_wumpus(); check_for_pit());
   Next is Iter + 1,
   loop(Next).
