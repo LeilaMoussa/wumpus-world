@@ -1,5 +1,3 @@
-% TODO: Clean some rules from unnecessary checks (e.g., no_surrounding_pit() checks if there is room(X,Y) which adjacent() also does that)
-
 :- abolish(stench/1).
 :- abolish(breeze/1).
 :- abolish(glitter/1).
@@ -22,20 +20,12 @@
   current_safest_cell/1
 ]).
 
-has_pit(room(X,Y), no) :- position(room(A, B), _), adjacent(room(X,Y), room(A, B)), not(breeze(room(A,B))), !.
-
-has_pit(room(X,Y), no) :- has_wumpus(room(X,Y), yes).
-
-has_pit(room(X,Y), maybe) :- not(has_pit(room(X, Y), yes)), not(has_pit(room(X, Y), no)), not(has_wumpus(room(X,Y), yes)),
-                             adjacent(room(X,Y), room(A, B)) , breeze(room(A,B)), !.
-
 no_surrounding_pit(room(A,B)) :- adjacent(room(X,Y), room(A, B)), not(has_pit(room(X,Y), yes)).
 
 no_surrounding_wumpus(room(A,B)) :- adjacent(room(X,Y), room(A, B)), not(has_wumpus(room(X,Y), yes)).
 
 all_adjacent_visited(room(A,B)) :- adjacent(room(X,Y), room(A, B)), not(visited(room(X,Y), _)) , !, fail.
 
-% workaround to manually trigger "yes" checks
 check_for_pit() :- breeze(room(A,B)), adjacent(room(X,Y), room(A, B)), (no_surrounding_pit(room(A,B)); all_adjacent_visited(room(A,B))),
           room(X, Y) \== room(1, 1),
           not(has_pit(room(X, Y), no)),
@@ -62,9 +52,6 @@ tell_kb(glitter, room(X, Y)) :- retractall(glitter(room(X, Y))), assertz(glitter
 tell_kb(scream) :- assertz(scream(yes)).
 
 % HEURISTICS
-% This is never triggered, which is alright because we check it in the loop anyway.
-% It doesn't hurt to keep it (and make it look like we actually use the scream perceptor),
-% OR we could remove the check from the loop and try to rely on this one.
 heuristic([_, _, _, yes]) :-  write('Congrats... You won!'), halt.
 
 % opportunistically grab the gold
